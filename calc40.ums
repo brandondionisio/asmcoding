@@ -1,0 +1,619 @@
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+ #                                                     #
+ #                 calc40.ums                          #
+ #                                                     #
+ #    Assignment: HW 08: asm coding                    #
+ #       Authors: Jordan Pauzie (jpauzi01) &           #
+ #                Brandon Dionisio (bdioni01)          #
+ #          Date: 4/28/2024                            #
+ #                                                     #
+ #    Summary: Assembly for the functional component   #
+ #             of the RPN calculator. Handles the      #
+ #             querying of operations through the      #
+ #             'waiting' and 'entering' FSA, manages   #
+ #             errors, and contains the                #
+ #             implementation of the jump table        #
+ #             routing the operations.                 #
+ #                                                     #
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+ # # # # # # # # # Conventions # # # # # # # # # #
+ #                                               #
+ #  - r0 is zero                                 #
+ #  - r1 holds the return address                #
+ #  - r2 holds endstack pointer (call stack)     #
+ #  - r3 and r4 are general purpose registers    #
+ #  - r5 holds endvalstack pointer (value stack) #
+ #  - r6 and r7 are temporary registers          #
+ #                                               #
+ # # # # # # # # # # # # # # # # # # # # # # # # #
+
+.section init  
+        # Hard set r0 to equal zero
+        r0 := 0
+        .zero r0
+
+        # Initialize temporary registers
+        .temp r6, r7
+
+.section rodata
+        # Initialize a jump table of size 256
+        jumptable:
+                .space 256
+
+.section init  
+        # Initialize r1 to zero
+        r1 := 0
+
+        # Treats the value in r1 as a counter from 0-256 and loads memory
+        # in the return address register (r0) to intialize the jump table,
+        # setting all char inputs to jump to the input_error block.
+        init_jumptable:
+                # Conditional "if" continues loop until the entire
+                # jump table has been intialized
+                if (r1 >=s 256) goto init_num using r3
+
+                # Initializes every operators on the jump table to point to the
+                # block "input_error"
+                r4 := jumptable + r1
+                m[r0][r4] := input_error
+
+                # Increment counter by one
+                r1 := r1 + 1
+
+                # Jump back to top of the loop
+                goto init_jumptable
+
+        # With r1 containing digits from 0-9 and r4 containing the jump table's
+        # place in memory associated with these digits, initializes this memory
+        # to contain the digit block.
+        init_num:
+                # Set r1 to equal to '0' i.e. 48
+                r1 := '0'
+
+                # Inner loop with r1 containing digits from 0-9 and r4
+                # containing the memory in the jump table to initialize the
+                # spots in memory associated with the digit jumps to equal
+                # the digit block.
+                init_loop:
+                        # Conditional "if" continues loop until the entire
+                        # value stack has been printed
+                        if (r1 == ':') goto init_op using r3
+
+                        # Sets the offset in the jump table 
+                        r4 := jumptable + r1
+                        m[r0][r4] := digit
+
+                        # Increment counter by one
+                        r1 := r1 + 1
+
+                        # Jump back to top of the loop
+                        goto init_loop
+
+        # Initializes the area in memory associated with the jump table at
+        # each operation to equal their corresponding blocks
+        init_op:
+                # Initialize all other operators within jump table based on
+                # the offsets of the "char" commands
+                m[r0][jumptable + ' '] := waiting
+                m[r0][jumptable + '\n'] := newl
+                m[r0][jumptable + '+'] := add
+                m[r0][jumptable + '-'] := sub
+                m[r0][jumptable + '*'] := mul
+                m[r0][jumptable + '/'] := div
+                m[r0][jumptable + '|'] := or
+                m[r0][jumptable + '&'] := and
+                m[r0][jumptable + 'c'] := sign
+                m[r0][jumptable + '~'] := not
+                m[r0][jumptable + 's'] := swap
+                m[r0][jumptable + 'd'] := dup
+                m[r0][jumptable + 'p'] := pop1
+                m[r0][jumptable + 'z'] := zero
+
+.section text
+        # Push the return address register r1 onto the call stack, the general
+        # purpose registers r3 and r4 onto the call stack, and then jump to the
+        # waiting state.
+        main:   
+                # Push r1, r4 and r3 onto call stack 
+                push r1 on stack r2
+                push r4 on stack r2
+                push r3 on stack r2
+                
+                # Jump to waiting state
+                goto waiting
+        
+        # Handles the 'waiting' part of the 'waiting' and 'entering' FSA with
+        # the input stored in r1. Depending on whether the value in r1 is a
+        # digit character or a non-digit character, jumps to different blocks.
+        waiting:
+                # Set r1 to be the input
+                r1 := input()
+
+                # Check if r1 is within the lower bound for a valid ASCII digit
+                if (r1 >=s 48) goto midphase using r3
+                
+                # Assuming that the input in r1 is a non-digit character,
+                # jumps to the block from the jump table associated with that
+                # character.
+                waiting_with_character:
+                        # Check if r1 is an invalid char and if so, end program
+                        if (r1 == -1) goto endprogram using r3
+
+                        # Set r3 to be the address of the block obtained via
+                        # the jumptable
+                        r3 := jumptable + r1
+
+                        # Set r3 to be the block obtained using the address
+                        r3 := m[r0][r3]
+
+                        # Jump to that block in order to complete the operation
+                        # dictated by the "char" command
+                        goto r3
+
+        # Assuming that the input stored in r1 is above the ASCII value 48,
+        # checks whether that value is a digit or non-digit character and
+        # jumps to different blocks according to each case. 
+        midphase:
+                # Check if r1 is within the upper bound for a valid ASCII digit
+                if (r1 <=s 58) goto push_stack using r3
+
+                # Jump to "waiting_with_character" block if r1 is not a digit
+                goto waiting_with_character using r3
+
+        # Assuming that the input stored in r1 is a digit character, pushes
+        # that digit onto the value stack and jumps to the entering state,
+        # where more input is taken in. 
+        push_stack:
+                # Convert r1 from ASCII to decimal by subtracting r1 by '0'
+                # i.e. 48
+                r1 := r1 - '0'
+
+                # Push resulting element onto the value stack
+                push r1 on stack r5
+
+                # Return to entering state
+                goto entering using r3
+
+        # Handles the 'entering' part of the 'waiting' and 'entering' FSA with
+        # the input stored in r1. Assuming that the previous input was a digit
+        # char, keeps taking in character inputs into r1 until the input is no
+        # longer a digit. r3 holds the number made from the read-in digits and
+        # the value in r3 is pushed onto the value stack.
+        entering:
+                # Set r1 to be the input
+                r1 := input()
+                
+                # Check if r1 is a digit or character
+                if (r1 >s 58) goto waiting_with_character using r4
+                if (r1 <s 48) goto waiting_with_character using r4
+
+                # Pop top element off value stack into r3
+                pop r3 off stack r5
+
+                # Multiply element by ten and then add the new digit to it
+                r3 := r3 * 10
+                r1 := r1 - '0'
+                r3 := r1 + r3
+
+                # Push resulting element onto the value stack
+                push r3 on stack r5
+
+                # Return to entering state
+                goto entering
+
+        # Push the value of register r1 in decimal form onto the value stack in
+        # register r5. Return to the entering state.
+        digit:  
+                # Set r1 to be the difference of r1 and '0' i.e. 48, which 
+                # allows you to obtain the convert the ASCII value to decimal
+                r1 := r1 - '0'
+
+                # Push element onto the value stack
+                push r1 on stack r5
+
+                # Return to entering state
+                goto entering
+        
+        # Pop the general registers (r3 and r4) and the return address register
+        # (r1) off the call stack. Returns to the block in register r1.
+        endprogram:
+                # Pop elements off the call stack into r3, r4, r1
+                pop r3 off stack r2
+                pop r4 off stack r2
+                pop r1 off stack r2
+
+                # Jump back to return address
+                goto r1
+
+        # Prints an error message associated with the input char stored in
+        # register r1 and return to the waiting state.
+        input_error:   
+                # Output error message
+                output "Unknown character '"
+                output r1
+                output "'\n"
+
+                # Return to waiting state
+                goto waiting using r3
+
+        # Prints an error message associated with there being less than 1
+        # element in the value stack and then returns to the waiting state.
+        stackunderflow_1:
+                # Output error message
+                output "Stack underflow---expected at least 1 element\n"
+
+                # Return to waiting state
+                goto waiting using r3
+        
+        # Prints an error message associated with there being less than 2
+        # element in the value stack and then returns to the waiting state.
+        stackunderflow_2:
+                # Output error message
+                output "Stack underflow---expected at least 2 elements\n"
+
+                # Return to waiting state
+                goto waiting using r3
+
+        # Prints an error message associated with a division by 0 operation
+        # and then returns to the waiting state.
+        division_by_0:
+                # Output error message
+                output "Division by zero\n"
+
+                # Return to waiting state
+                goto waiting using r3
+
+        # With r4 containing a counter and r1 containing the address of the
+        # value stack (r5) with an offset of the value in r4, loads r3 with the
+        # value of the element in r1 and pushes r3 on the call stack. Jumps to
+        # the print block and repeats, parsing through all elements on the
+        # value stack.
+        newl:
+                # Initialize r4 to zero to use as a counter
+                r4 := 0
+                loop:
+                        # Obtain address of next element on value stack
+                        r1 := r5 + r4   
+
+                        # Conditional "if" continues loop until the entire
+                        # value stack has been printed
+                        if (r1 == endvalstack) goto waiting using r3
+
+                        # Set r3 to equal the value of element contained at the
+                        # address r1
+                        r3 := m[r0][r1]
+
+                        # Push element onto the call stack
+                        push r3 on stack r2
+                        
+                        # Print element to standard output
+                        output ">>> "
+                        goto printd linking r1
+                        output "\n"
+                        
+                        # Increment counter by one
+                        r4 := r4 + 1
+
+                        # Jump back to top of the loop
+                        goto loop
+                
+                # Ends the newl operation
+                halt
+
+        # Checks if the value stack (r5) contains at least two elements,
+        # pops off the top two values into general registers r3 and r4, and
+        # then pushes back r3 onto the value stack where r3 contains the sum
+        # of the values of r3 and r4. Returns to the waiting state.
+        add:
+                # Check if there's enough elements to perform operation
+                if (r5 == endvalstack) goto stackunderflow_2 using r3
+                r4 := r5 + 1
+                if (r4 == endvalstack) goto stackunderflow_2 using r3
+
+                # Pop first and second elements off value stack into r3 and r4
+                pop r3 off stack r5
+                pop r4 off stack r5
+
+                # Set r3 to be the sum of r4 and r3
+                r3 := r4 + r3
+
+                # Push resulting element onto the value stack
+                push r3 on stack r5
+
+                # Return to waiting state
+                goto waiting using r3
+
+        # Checks if the value stack (r5) contains at least two elements,
+        # pops off the top two values into general registers r3 and r4, and
+        # then pushes back r3 onto the value stack where r3 contains the
+        # difference of the values of r4 and r3. Returns to the waiting state.
+        sub:    
+                # Check if there's enough elements to perform operation
+                if (r5 == endvalstack) goto stackunderflow_2 using r3
+                r4 := r5 + 1
+                if (r4 == endvalstack) goto stackunderflow_2 using r3
+
+                # Pop first and second elements off value stack into r3 and r4
+                pop r3 off stack r5
+                pop r4 off stack r5
+
+                # Set r3 to be the difference of r4 and r3
+                r3 := r4 - r3
+
+                # Push resulting element onto the value stack
+                push r3 on stack r5
+                
+                # Return to waiting state
+                goto waiting using r3
+
+        # Checks if the value stack (r5) contains at least two elements,
+        # pops off the top two values into general registers r3 and r4, and
+        # then pushes back r3 onto the value stack where r3 contains the
+        # product of the values of r3 and r4. Returns to the waiting state.
+        mul:
+                # Check if there's enough elements to perform operation
+                if (r5 == endvalstack) goto stackunderflow_2 using r3
+                r4 := r5 + 1
+                if (r4 == endvalstack) goto stackunderflow_2 using r3
+                
+                # Pop first and second elements off value stack into r3 and r4
+                pop r3 off stack r5
+                pop r4 off stack r5
+
+                # Set r3 to be the product of r4 and r3
+                r3 := r4 * r3
+
+                # Push resulting element onto the value stack
+                push r3 on stack r5
+                
+                # Return to waiting state
+                goto waiting using r3
+
+        # Checks if the value stack (r5) contains at least two elements,
+        # pops off the top two values into general registers r3 and r4, and
+        # then pushes back r3 onto the value stack where r3 contains the
+        # quotient of the values of r4 and r3. Returns to the waiting state.
+        div:    
+                # Check if there's enough elements to perform operation
+                if (r5 == endvalstack) goto stackunderflow_2 using r1
+                r4 := r5 + 1
+                if (r4 == endvalstack) goto stackunderflow_2 using r1
+
+                # Set r3 and r4 to equal the values of first and second
+                # elements contained in the value stack
+                r3 := m[r0][r5]
+                r5 := r5 + 1
+                r4 := m[r0][r5]
+                r5 := r5 - 1
+
+                # Check if the r3, the first element i.e. divisor, is zero
+                if (r3 == r0) goto division_by_0 using r1 
+                
+                # Pop first and second elements off value stack
+                pop stack r5
+                pop stack r5
+                
+                # Checks if either r3 or r4 are negative
+                if (r4 <s r0) goto case_1 using r1
+                if (r3 <s r0) goto case_3 using r1
+                
+                # Set r3 to be the quotient of r4 and r3
+                r3 := r4 / r3
+
+                # Push resulting element onto the value stack
+                push r3 on stack r5
+                
+                # Return to waiting state
+                goto waiting using r3
+
+                # Assuming that r4, the first value popped from the value
+                # stack, is negative, jumps to block case_2 if the r3, the
+                # second popped value, is also negative. If not, r3 contains
+                # the quotient of r4 and r3 and is pushed onto the value stack
+                # r5; returns to the waiting state.
+                case_1:
+                        # Checks if r3 is negative as well
+                        if (r3 <s 0) goto case_2 using r1
+
+                        # Convert r4 into a positive number
+                        r4 := r4 * -1
+
+                        # Set r3 to be the quotient of r4 and r3
+                        r3 := r4 / r3
+
+                        # Convert r3 into a negative number
+                        r3 := r3 * -1
+
+                        # Push resulting element onto the value stack
+                        push r3 on stack r5
+                        
+                        # Return to waiting state
+                        goto waiting using r3
+                
+                # Assuming that r4 and r3 both contain negative values, pushes
+                # r3 onto the value stack r5, where r3 is the quotient of r4
+                # r3.
+                case_2: 
+                        # Convert both r3 and r4 into positive numbers to mimic
+                        # how (-) / (-) = (+)
+                        r3 := r3 * -1
+                        r4 := r4 * -1
+
+                        # Set r3 to be the quotient of r4 and r3
+                        r3 := r4 / r3
+
+                        # Push resulting element onto the value stack
+                        push r3 on stack r5
+                        
+                        # Return to waiting state
+                        goto waiting using r3
+
+                # Assuming that r3 is a negative number, but r4 is positive,
+                # convert r3 into a positive number, set r3 to be the quotient
+                # of r4 / r3, reconvert back into a negative number, and then
+                # push r3 back into the value stack held in r5.
+                case_3: 
+                        # Convert r3 into a positive number
+                        r3 := r3 * -1
+
+                        # Set r3 to be the quotient of r4 and r3
+                        r3 := r4 / r3
+
+                        # Convert r3 into a negative number
+                        r3 := r3 * -1
+
+                        # Push resulting element onto the value stack
+                        push r3 on stack r5
+
+                        # Return to waiting state
+                        goto waiting using r3
+        
+        # Checks if the value stack contains at least two elements, and
+        # r3 and r4 will be used to contain the first and second elements on
+        # the value stack. r3 will then contain the "bitwise OR" of r3 and r4
+        # and be pushed back into the value stack held in r5. 
+        or:
+                # Check if there's enough elements to perform operation
+                if (r5 == endvalstack) goto stackunderflow_2 using r3
+                r4 := r5 + 1
+                if (r4 == endvalstack) goto stackunderflow_2 using r3
+
+                # Pop first and second elements off value stack into r3 and r4
+                pop r3 off stack r5
+                pop r4 off stack r5
+
+                # Set r3 to be the "bitwise OR" of r3 and r4
+                r3 := r3 | r4
+
+                # Push resulting element onto the value stack
+                push r3 on stack r5
+                
+                # Return to waiting state
+                goto waiting using r3
+
+        # Assuming that there are at least two elements in the value stack,
+        # r3 and r4 will be used to contain the first and second elements on
+        # the value stack. r3 will then contain the "bitwise AND" of r3 and r4
+        # and be pushed back into the value stack held in r5. 
+        and:
+                # Check if there's enough elements to perform operation
+                if (r5 == endvalstack) goto stackunderflow_2 using r3
+                r4 := r5 + 1
+                if (r4 == endvalstack) goto stackunderflow_2 using r3
+
+                # Pop first and second elements off value stack into r3 and r4
+                pop r3 off stack r5
+                pop r4 off stack r5
+
+                # Set r3 to be the "bitwise AND" of r3 and r4
+                r3 := r3 & r4
+
+                # Push resulting element onto the value stack
+                push r3 on stack r5
+                
+                # Return to waiting state
+                goto waiting using r3
+                
+        # Assuming that there is at least one element in the value stack, r3
+        # will contain the first element on the value stack, have its sign
+        # flipped, and pushed back into the value stack held in r5.
+        sign:
+                # Check if there's enough elements to perform operation
+                if (r5 == endvalstack) goto stackunderflow_1 using r3
+
+                # Pop top element off value stack into r3
+                pop r3 off stack r5
+
+                # Set r3 to be the complement of r3 minus one to obtain the
+                # same value with flipped sign
+                r3 := ~r3 + -1
+
+                # Push flipped element onto the value stack
+                push r3 on stack r5
+
+                # Return to waiting state
+                goto waiting using r3
+
+        # Assuming that there is at least one element in the value stack, r3
+        # will contain the first element on the value stack, be negated, and
+        # pushed back into the value stack held in r5.
+        not:    
+                # Check if there's enough elements to perform operation
+                if (r5 == endvalstack) goto stackunderflow_1 using r3
+                
+                # Pop top element off value stack into r3
+                pop r3 off stack r5
+
+                # Set r3 to be the complement of r3
+                r3 := ~r3
+                
+                # Push negated element onto the value stack
+                push r3 on stack r5
+
+                # Return to waiting state
+                goto waiting using r3
+        
+        # Assuming that there are at least two elements in the value stack,
+        # r3 and r4 will be used to contain the first and second elements on
+        # the value stack and be pushed back in swapped order. 
+        swap:   
+                # Check if there's enough elements to perform operation
+                if (r5 == endvalstack) goto stackunderflow_2 using r3
+                r4 := r5 + 1
+                if (r4 == endvalstack) goto stackunderflow_2 using r3
+
+                # Pop first and second elements off value stack into r3 and r4
+                pop r3 off stack r5
+                pop r4 off stack r5
+
+                # Push the second and first elements onto the value stack
+                push r3 on stack r5
+                push r4 on stack r5
+                
+                # Return to waiting state
+                goto waiting using r3
+                
+        # Assuming that there is at least one element in the value stack, r3
+        # will be used as the register containing the value to be duplicated,
+        # the element on top of the value stack in r5, and pushes it onto the
+        # value stack
+        dup:    
+                # Check if there's enough elements to perform operation
+                if (r5 == endvalstack) goto stackunderflow_1 using r3
+
+                # Set r3 to equal the value of element contained on top of the
+                # value stack
+                r3 := m[r0][r5]
+
+                # Push duplicate element onto value stack
+                push r3 on stack r5
+
+                # Return to waiting state
+                goto waiting using r3
+        
+        # Checks if the value stack r5 contains at least 1 element, pops the
+        # top element off of the value stack, and then returns to the waiting
+        # state held in r3.
+        pop1:
+                # Check if there's enough elements to perform operation
+                if (r5 == endvalstack) goto stackunderflow_1 using r3
+
+                # Pop top element off value stack
+                pop stack r5
+
+                # Return to waiting state
+                goto waiting using r3
+
+        # Pops every element off of the value stack in r5 and then returns to
+        # the waiting state held in r3.
+        zero:
+                # Pop element off the value stack
+                pop stack r5
+
+                # Conditional "if" continues loop until the entire value stack
+                # has been popped off
+                if (r5 != endvalstack) goto zero using r3
+                
+                # Return to waiting state
+                goto waiting using r3

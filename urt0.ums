@@ -1,0 +1,40 @@
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+ #                                                     #
+ #                urt0.ums                             #
+ #                                                     #
+ #    Assignment: HW 08: asm coding                    #
+ #       Authors: Jordan Pauzie (jpauzi01) &           #
+ #                Brandon Dionisio (bdioni01)          #
+ #          Date: 4/28/2024                            #
+ #                                                     #
+ #    Summary: Assembly for the initialization of      #
+ #             registers, call stack and value stack   #
+ #             used throughout the whole program. This #
+ #             function sets aside r6 and r7 as temp   #
+ #             registers, sets r0 to always hold the   #
+ #             number 0, and sets r2 and r5 to hold    #
+ #             the call stack and value stack          #
+ #             addresses, respectively.                #
+ #                                                     #
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+.section init
+        # Hard set r0 to equal zero
+        r0 := 0
+        .zero r0
+
+        # Initialize temporary registers
+        .temps r6, r7
+
+.section data
+        # Initialize two stacks (call stack and value stack) of size 10000
+        .space 10000
+        endstack:
+        .space 10000
+        endvalstack:
+
+.section init
+        # Set r2 to the address of the call stack and r5 to the address of the
+        # value stack
+        r2 := endstack
+        r5 := endvalstack

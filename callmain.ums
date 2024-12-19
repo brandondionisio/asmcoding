@@ -1,0 +1,45 @@
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+ #                                                     #
+ #                callmain.ums                         #
+ #                                                     #
+ #    Assignment: HW 08: asm coding                    #
+ #       Authors: Jordan Pauzie (jpauzi01) &           #
+ #                Brandon Dionisio (bdioni01)          #
+ #          Date: 4/28/2024                            #
+ #                                                     #
+ #    Summary: Assembly for the initialization of      #
+ #             registers and the calling of the main   #
+ #             function found in calc40.ums. This      #
+ #             function sets aside r6 and r7 as temp   #
+ #             registers and sets r0 to always hold    #
+ #             the number 0.                           #
+ #                                                     #
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+ # # # # # # # # # Conventions # # # # # # # # # #
+ #                                               #
+ #  - r0 is zero                                 #
+ #  - r1 holds the return address                #
+ #  - r2 holds endstack pointer (call stack)     #
+ #  - r3 and r4 are general purpose registers    #
+ #  - r5 holds endvalstack pointer (value stack) #
+ #  - r6 and r7 are temporary registers          #
+ #                                               #
+ # # # # # # # # # # # # # # # # # # # # # # # # #
+
+.section init
+        # Hard set r0 to equal zero
+        r0 := 0
+        .zero r0
+
+        # Initialize temporary registers
+        .temp r6, r7
+
+        # Starts the program by jumping to main and then halting once the
+        # operations in main have been completed.
+        start:
+                # Jump to "main" block linked via r1
+                goto main linking r1
+
+                # Halt the program upon completion
+                halt

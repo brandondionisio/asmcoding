@@ -1,0 +1,143 @@
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+ #                                                     #
+ #                  printd.ums                         #
+ #                                                     #
+ #    Assignment: HW 08: asm coding                    #
+ #       Authors: Jordan Pauzie (jpauzi01) &           #
+ #                Brandon Dionisio (bdioni01)          #
+ #          Date: 4/28/2024                            #
+ #                                                     #
+ #    Summary: Assembly for handling the print         #
+ #             operation and its several cases.        #
+ #             Given a number on the call stack,       #
+ #             the printd section will recursively     #
+ #             output each digit of that number and    #
+ #             then free the call stack. The cases     #
+ #             where the number is negative or is the  #
+ #             most negative number are handled        #
+ #             individually.                           #
+ #                                                     #
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+ # # # # # # # # # Conventions # # # # # # # # # #
+ #                                               #
+ #  - r0 is zero                                 #
+ #  - r1 holds the return address                #
+ #  - r2 holds endstack pointer (call stack)     #
+ #  - r3 and r4 are general purpose registers    #
+ #  - r5 holds endvalstack pointer (value stack) #
+ #  - r6 and r7 are temporary registers          #
+ #                                               #
+ # # # # # # # # # # # # # # # # # # # # # # # # #
+
+.section init
+        # Hard set r0 to equal zero
+        r0 := 0
+        .zero r0
+
+        # Initialize temporary registers
+        .temp r6, r7
+
+.section text
+        # Pushes r1 (the return address register), and r3 and r4 (the general
+        # purpose registers) onto the call stack and then loads the passed-in
+        # number from the call stack in r3. Depending on the case, prints out
+        # the number and then jumps to end_print to pop from the call stack and
+        # return.
+        printd:
+                # Push return address register onto the stack.
+                push r1 on stack r2
+                # Push general purpose registers onto the stack.
+                push r3 on stack r2
+                push r4 on stack r2
+
+                # Loads general purpose register r3 with the number passed in
+                # from the call stack.
+                r3 := m[r0][r2+3]
+                
+                # loads r4 with the most negative possible number.
+                r4 := 0x80000000
+
+                # Compares the number to be printed, checking if it is most
+                # negative. If so, jump to the most_negative block.
+                if (r3 == r4) goto most_negative using r1
+
+                # Checks to see if the number to be printed is negative,
+                # jumping to the negative block if so.
+                if (r3 <s 0) goto negative using r1
+
+                # Modular division to remove the last digit from the number
+                # in r3. The number in r3 has its ones digit removed.
+                r4 := r3 mod 10
+                r3 := r3 / 10
+                
+                # If there are no more digits to print from the number in r3,
+                # jump to the base case.
+                if (r3 == 0) goto base_case
+
+                # Push the new number on the stack and then jump back up to the
+                # print function.
+                push r3 on stack r2
+                goto printd linking r1
+
+                # Convert to decimal and print the digit we extracted.
+                r4 := r4 + '0'
+                output r4
+
+                # Jump to end_print to pop from the call stack and return.
+                goto end_print
+
+        # In the case where the number passed in from the call stack contains
+        # the most negative possible number (-2147483648), prints that number
+        # and then jumps to end_print to pop from the call stack and return.
+        most_negative:
+                # Output the most negative number.
+                output "-2147483648"
+                
+                # Jump to end_print to pop from the call stack and return.
+                goto end_print
+
+        # Sets the general purpose register r4 to the number in general purpose
+        # register r3 with a flipped sign, where the number in r3 is a negative
+        # number being printed. The now positive number in r4 is pushed onto the
+        # call stack and the block jumps to printd to print the number normally
+        # (now with a "-" in front of it).
+        negative:
+                output "-"
+                
+                # Convert the number in r3 to positive and store in r4
+                r4 := r3 * -1
+
+                # Push the positive number in r4 on the call stack
+                push r4 on stack r2
+
+                # Call printd to print the number that was pushed on.
+                goto printd linking r1
+
+                # Jump to end_print to pop from the call stack and return.
+                goto end_print
+
+        # Prints out the decimal representation of the value in the r4
+        # register.
+        base_case:
+                # Print the decimal representation of the extracted digit.
+                r3 := r4 + '0'
+                output r3
+
+        # Pops the general registers and the return address off the call
+        # stack once the number is finished printing. Pops the number being
+        # printed off the call stack and then returns to the where the function
+        # was called.
+        end_print:
+                # Pop the general registers off the call stack.
+                pop r4 off stack r2
+                pop r3 off stack r2
+
+                # Pop the return address register off the call stack.
+                pop r1 off stack r2
+
+                # Pop the number from the call stack.
+                pop stack r2
+
+                # Return back to main.
+                goto r1

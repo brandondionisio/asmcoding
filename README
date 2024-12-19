@@ -1,0 +1,73 @@
+/**************************************************************
+ *
+ *                     README
+ *
+ *     Assignment: HW 8: asmcoding
+ *        Authors: Brandon Dionisio & Jordan Pauzie (jpauzi01 & bdioni01)
+ *           Date: 04/28/24
+ *
+ **************************************************************/
+
+Who we collaborated with:
+    
+    We did not collaborate with anyone on this assignment.
+
+What we implemented correctly:
+    
+    We fully implemented the calc40.um program, which is an RPN calculator
+    written in UM assembly. In doing this, we were able to successfully 
+    implement a finite-state control flow that relied on entering and waiting
+    states, and a jump table that linked blocks with commands. 
+
+Departures from the recommended calling convention:
+
+    We did not have any departures from the recommended calling convention,
+    instead using the recommended format defined by: urt0.ums, callmain.ums,
+    printd.ums and calc40.ums.
+
+How we implemented the print module:
+
+    We initially set r3 to equal the number to be printed, which was passed in
+    from the call stack, and r4 to equal the most negative case 0x80000000. We 
+    checked for that condition, then checked if r3 was negative, and then used 
+    a recursive loop to print the number by using modular division to remove 
+    the last digit from the number and storing the remainder in r4. If the
+    value in r3 was negative, we outputted '-', converted the value in r3 to be
+    positive, and then jumped back up to the print block. After the number was 
+    successfully printed, we popped all contents from the call stack and 
+    returned to where the printd function was called in main.
+    
+How we represented the value stack:
+
+    We declared a stack of size 100000 and set r5 to its address.
+
+Sections created:
+
+    In urt0.ums:
+        - init -> Initialized register values
+        - data -> Initialized a call stack and value stack of size 10000
+
+    In callmain.ums:
+        - init -> Initialized register values
+
+    In printd.ums:
+        - init -> Initialized register values
+        - text -> Defined the blocks required to perform the print operation
+
+    In calc40.ums:
+        - init -> Initalized register and jump table values
+        - rodata -> Initialized a jump table of size 256
+        - text -> Defined the blocks required to perform the various operations
+                required for an RPN calculator to function
+
+Time spent analyzing the assignment:
+
+    We spent about 5 hours on this part of the assignment.
+
+Time spent writing assembly code:
+
+    We spent about 10 hours on this part of the assignment.
+
+Time spent debugging our calculator:
+    
+    We spent about 2 hours on this part of the assignment
